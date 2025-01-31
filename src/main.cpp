@@ -1,101 +1,71 @@
 #include <Arduino.h>
-#include <AccelStepper.h>
 
-// ==================== PIN ASSIGNMENTS ====================
-constexpr uint8_t STEP_PIN = 4;
-constexpr uint8_t DIR_PIN = 5;
-constexpr uint8_t ENABLE_PIN = 6;
-constexpr uint8_t HOME_SWITCH_PIN = 2; // Top limit switch
+// ==================== TF Mini LiDAR Configuration ====================
+HardwareSerial &lidarSerial = Serial2;  // Use Serial2 (RX1=pin 7, TX1=pin 8)
 
-// ==================== CONSTANTS ====================
-constexpr uint16_t MAX_SPEED = 1000;      // Steps/sec (normal movement)
-constexpr uint16_t HOMING_SPEED = 200;   // Steps/sec (slow for homing)
-constexpr uint16_t ACCELERATION = 400;   // Steps/sec²
-constexpr int32_t MAX_STEPS_DOWN = 600; // Max displacement from home
-constexpr int32_t BACKOFF_STEPS = 10;    // Steps to back off after hitting limit
+// Packet structure constants
+const uint8_t HEADER_BYTE = 0x59;
+const uint8_t PACKET_SIZE = 9;
 
-// ==================== GLOBALS ====================
-AccelStepper stepper(AccelStepper::DRIVER, STEP_PIN, DIR_PIN);
-bool isHomed = false;
+// Data storage
+uint8_t lidarBuffer[PACKET_SIZE];
+int16_t distance = -1;   // -1 = invalid measurement
+int16_t strength = -1;
+bool validData = false;
 
 void setup() {
-  Serial.begin(9600);
-  pinMode(ENABLE_PIN, OUTPUT);
-  digitalWrite(ENABLE_PIN, LOW); // Motor ALWAYS ENABLED (to hold position)
-  pinMode(HOME_SWITCH_PIN, INPUT_PULLUP);
+  Serial.begin(115200);    // USB serial for debugging
+  lidarSerial.begin(115200);  // TF Mini default baud rate
 
-  stepper.setMaxSpeed(MAX_SPEED);
-  stepper.setAcceleration(ACCELERATION);
-  stepper.setCurrentPosition(0);
-
-  Serial.println("System ready. Send 'h' to home, 'w'/'s' to move.");
+  while (!Serial); // Wait for USB connection
+  
+  Serial.println("\nTF Mini LiDAR Test - Teensy 4.0");
+  Serial.println("--------------------------------");
 }
 
-// --------------- Improved Homing Routine ---------------
-void homeMotor() {
-  Serial.println("Homing: Moving UP until limit switch is pressed...");
+void processLidarData() {
+  validData = false;
   
-  digitalWrite(ENABLE_PIN, LOW);
-  // Stage 1: Fast approach to limit switch
-  stepper.setSpeed(-HOMING_SPEED); // Move UP (adjust sign based on wiring)
-  while (digitalRead(HOME_SWITCH_PIN) != LOW) {
-    stepper.runSpeed();
+  if (lidarSerial.available() >= PACKET_SIZE) {
+    // Read entire packet
+    lidarSerial.readBytes(lidarBuffer, PACKET_SIZE);
+
+    // Verify packet headers
+    if (lidarBuffer[0] == HEADER_BYTE && lidarBuffer[1] == HEADER_BYTE) {
+      // Calculate checksum
+      uint16_t checksum = 0;
+      for (uint8_t i=0; i<8; i++) {
+        checksum += lidarBuffer[i];
+      }
+
+      // Validate checksum
+      if ((checksum & 0xFF) == lidarBuffer[8]) {
+        distance = lidarBuffer[2] | (lidarBuffer[3] << 8);
+        strength = lidarBuffer[4] | (lidarBuffer[5] << 8);
+        validData = true;
+      }
+    }
   }
-
-  // Stage 2: Back off slightly (to release the switch)
-  stepper.move(BACKOFF_STEPS);
-  while (stepper.run()) {}
-
-  // Set home position (0) and reset software limits
-  stepper.setCurrentPosition(0);
-  isHomed = true;
-  Serial.println("Homed! Position.");
-}
-
-// --------------- Motion Control ---------------
-void moveToTarget(int32_t target) {
-  
-  digitalWrite(ENABLE_PIN, LOW);
-
-  if (!isHomed) {
-    Serial.println("Home first!");
-    return;
-  }
-
-  // Clamp target within allowed range [588, 0]
-  target = constrain(target, 0, MAX_STEPS_DOWN);
-  stepper.moveTo(target);
-
-  // Block until movement completes
-  while (stepper.distanceToGo() != 0) {
-    stepper.run();
-  }
-  Serial.print("Reached position: ");
-  Serial.println(stepper.currentPosition());
 }
 
 void loop() {
-  if (Serial.available()) {
-    char command = Serial.read();
-    while (Serial.available()) Serial.read();
+  processLidarData();
 
-    switch (command) {
-      case 'h': // Home
-        homeMotor();
-        break;
-      case 'w': // Move UP to home (0)
-        moveToTarget(0);
-        break;
-      case 's': // Move DOWN to max displacement (-588)
-        moveToTarget(MAX_STEPS_DOWN);
-        break;
-      case 'd': // Stop
-        stepper.stop();
-        digitalWrite(ENABLE_PIN, HIGH);
-        Serial.println("Stopped.");
-        break;
-      default:
-        Serial.println("Invalid command. Use 'h', 'w', or 's'.");
-    }
+  if (validData) {
+    Serial.print("Distance: ");
+    Serial.print(distance);
+    Serial.print(" cm\t");
+    
+    Serial.print("Strength: ");
+    Serial.print(strength);
+    
+    // Add quality indicator
+    Serial.print("\t[");
+    if (strength > 200) Serial.print("HIGH");
+    else if (strength > 100) Serial.print("MED");
+    else Serial.print("LOW");
+    Serial.println("]");
   }
+
+  delay(50); // Adjust polling rate as needed
 }
