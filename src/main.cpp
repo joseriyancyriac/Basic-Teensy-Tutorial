@@ -8,13 +8,13 @@ constexpr uint8_t ENABLE_PIN = 6;
 constexpr uint8_t HOME_SWITCH_PIN = 2; // Top limit switch
 
 // ==================== CONSTANTS ====================
-constexpr uint16_t MAX_SPEED = 500;    // Steps/sec (normal movement)
+constexpr uint16_t MAX_SPEED = 480;     // Steps/sec (normal movement)
 constexpr uint16_t HOMING_SPEED = 200;  // Steps/sec (slow for homing)
-constexpr uint16_t ACCELERATION = 100;  // Steps/sec²
-constexpr int32_t MAX_STEPS_DOWN = 400; // Max displacement from home
+constexpr uint16_t ACCELERATION = 240;  // Steps/sec²
+constexpr int32_t MAX_STEPS_DOWN = 588; // Max displacement from home
 constexpr int32_t BACKOFF_STEPS = 10;   // Steps to back off after hitting limit
-constexpr uint8_t TOF_THRESHOLD = 10;   // Required clearance in cm
-constexpr float TOF_DEAD_ZONE = 1;    // Prevent jitter (cm)
+constexpr uint8_t TOF_THRESHOLD = 8;    // Required clearance in cm
+constexpr float TOF_DEAD_ZONE = 1;      // Prevent jitter (cm)
 
 // ==================== GLOBALS ====================
 AccelStepper stepper(AccelStepper::DRIVER, STEP_PIN, DIR_PIN);
@@ -37,7 +37,6 @@ float current_TOF_distance;
 
 // ==================== FUNCTION PROTOTYPES ====================
 void homeMotor();
-void moveStepperToPosition(int32_t target);
 float getTOFDistance();
 
 void setup()
@@ -45,8 +44,7 @@ void setup()
   Serial.begin(115200);
   lidarSerial.begin(115200); // TF Mini default baud rate
 
-  while (!Serial)
-    ; // Wait for USB connection
+  // while (!Serial); // Wait for Trigger
 
   pinMode(ENABLE_PIN, OUTPUT);
   digitalWrite(ENABLE_PIN, LOW); // Enable motor
