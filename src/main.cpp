@@ -17,6 +17,7 @@ constexpr uint8_t STEP_PIN = 4;
 constexpr uint8_t DIR_PIN = 5;
 constexpr uint8_t ENABLE_PIN = 6;
 constexpr uint8_t HOME_SWITCH_PIN = 2; // Top limit switch
+constexpr uint8_t BUTTON_PIN = 3;      // Homing trigger button
 
 // ==================== CONSTANTS ====================
 constexpr uint16_t MAX_SPEED = 480;               // Steps/sec (normal movement)
@@ -64,15 +65,6 @@ void setup()
   if (display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS))
   {
     displayConnected = true;
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(0, 0);
-    display.println("System Online");
-    display.setTextSize(2);
-    display.setCursor(0, 20);
-    display.print("Homing...");
-    display.display();
   }
   else
   {
@@ -83,6 +75,7 @@ void setup()
   pinMode(ENABLE_PIN, OUTPUT);
   digitalWrite(ENABLE_PIN, LOW); // Enable motor
   pinMode(HOME_SWITCH_PIN, INPUT_PULLUP);
+  pinMode(BUTTON_PIN, INPUT_PULLUP); // **Setup homing button**
 
   stepper.setMaxSpeed(MAX_SPEED);
   stepper.setAcceleration(ACCELERATION);
@@ -97,14 +90,46 @@ void homeMotor()
 {
   Serial.println("Homing: Moving UP until limit switch is pressed...");
 
+  if (digitalRead(BUTTON_PIN) == HIGH)
+  {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 5);
+    display.println("System Reset....");
+    display.setTextSize(2);
+    display.setCursor(0, 30);
+    display.print("Homing...");
+    display.display();
+  }
+  else
+  {
+
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 5);
+    display.println("System Online");
+    display.setTextSize(2);
+    display.setCursor(0, 30);
+    display.print("Homing...");
+    display.display();
+  }
+
   digitalWrite(ENABLE_PIN, LOW);
 
   // Move up until the limit switch is triggered
   stepper.setSpeed(-HOMING_SPEED);
+
   while (digitalRead(HOME_SWITCH_PIN) != LOW)
   {
     stepper.runSpeed();
   }
+
+  // 🛑 **Stop the motor immediately once limit switch is hit**
+  stepper.stop();
+  stepper.setSpeed(0);
+  Serial.println("Limit switch hit. Stopping.");
 
   // Back off slightly
   stepper.move(BACKOFF_STEPS);
@@ -115,6 +140,12 @@ void homeMotor()
   stepper.setCurrentPosition(10);
   isHomed = true;
   Serial.println("Homing complete! Position set.");
+
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.setTextSize(2);
+  display.print("Ready!");
+  display.display();
 }
 
 // ==================== TOF-CONTROLLED MOVEMENT ====================
@@ -122,6 +153,14 @@ void loop()
 {
   if (!isHomed)
     return; // **Skip loop execution until homing is done**
+
+  // **Check if button is pressed to trigger homing again**
+  if (digitalRead(BUTTON_PIN) == HIGH)
+  {
+    Serial.println("🔁 Homing button pressed! Re-initializing...");
+    homeMotor();
+    return;
+  }
 
   current_TOF_distance = getTOFDistance();
 
@@ -205,11 +244,11 @@ void updateDisplay(float distance)
     display.setTextSize(2);
     display.print("Clearance:");
     display.setTextSize(2);
-    display.setCursor(0, 20);
+    display.setCursor(0, 30);
     display.print(distance);
     display.println(" cm");
     display.setTextSize(1);
-    display.setCursor(0, 45);
+    display.setCursor(0, 55);
     display.print(" *** LIMIT HIT!!! ***");
     display.display();
   }
@@ -220,7 +259,7 @@ void updateDisplay(float distance)
     display.setTextSize(2);
     display.print("Clearance:");
     display.setTextSize(2);
-    display.setCursor(0, 20);
+    display.setCursor(0, 30);
     display.print(distance);
     display.print(" cm");
     display.display();
