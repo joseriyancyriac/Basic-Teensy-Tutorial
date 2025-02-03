@@ -69,6 +69,9 @@ void setup()
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(0, 0);
     display.println("System Online");
+    display.setTextSize(2);
+    display.setCursor(0, 20);
+    display.print("Homing...");
     display.display();
   }
   else
@@ -195,14 +198,31 @@ void updateDisplay(float distance)
   lastDisplayUpdate = millis();
   if (!displayConnected)
     return;
-
-  display.clearDisplay();
-  display.setCursor(0, 0);
-  display.setTextSize(1);
-  display.print("TOF Distance:");
-  display.setTextSize(2);
-  display.setCursor(0, 20);
-  display.print(distance);
-  display.print(" cm");
-  display.display();
+  if (digitalRead(HOME_SWITCH_PIN) == LOW)
+  {
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.setTextSize(2);
+    display.print("Clearance:");
+    display.setTextSize(2);
+    display.setCursor(0, 20);
+    display.print(distance);
+    display.println(" cm");
+    display.setTextSize(1);
+    display.setCursor(0, 45);
+    display.print(" *** LIMIT HIT!!! ***");
+    display.display();
+  }
+  else
+  {
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.setTextSize(2);
+    display.print("Clearance:");
+    display.setTextSize(2);
+    display.setCursor(0, 20);
+    display.print(distance);
+    display.print(" cm");
+    display.display();
+  }
 }
